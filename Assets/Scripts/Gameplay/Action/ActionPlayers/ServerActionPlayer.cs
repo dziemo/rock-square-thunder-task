@@ -58,7 +58,13 @@ namespace Unity.BossRoom.Gameplay.Actions
                 return;
             }
 
-            var newAction = ActionFactory.CreateActionFromData(ref action);
+            Action newAction = ActionFactory.CreateActionFromData(ref action);
+
+            if (newAction.Config.ManaCost > m_ServerCharacter.ManaHandler.ManaPoints)
+            {
+                return;
+            }
+
             m_Queue.Add(newAction);
             if (m_Queue.Count == 1) { StartAction(); }
         }
@@ -75,16 +81,16 @@ namespace Unity.BossRoom.Gameplay.Actions
 
             //clear the action queue
             {
-                var removedActions = ListPool<Action>.Get();
+                List<Action> removedActions = ListPool<Action>.Get();
 
-                foreach (var action in m_Queue)
+                foreach (Action action in m_Queue)
                 {
                     removedActions.Add(action);
                 }
 
                 m_Queue.Clear();
 
-                foreach (var action in removedActions)
+                foreach (Action action in removedActions)
                 {
                     TryReturnAction(action);
                 }
@@ -95,16 +101,16 @@ namespace Unity.BossRoom.Gameplay.Actions
 
             if (cancelNonBlocking)
             {
-                var removedActions = ListPool<Action>.Get();
+                List<Action> removedActions = ListPool<Action>.Get();
 
-                foreach (var action in m_NonBlockingActions)
+                foreach (Action action in m_NonBlockingActions)
                 {
                     action.Cancel(m_ServerCharacter);
                     removedActions.Add(action);
                 }
                 m_NonBlockingActions.Clear();
 
-                foreach (var action in removedActions)
+                foreach (Action action in removedActions)
                 {
                     TryReturnAction(action);
                 }
@@ -142,7 +148,7 @@ namespace Unity.BossRoom.Gameplay.Actions
         {
             if (m_LastUsedTimestamps.TryGetValue(actionID, out float lastTimeUsed))
             {
-                var abilityConfig = GameDataSource.Instance.GetActionPrototypeByID(actionID).Config;
+                ActionConfig abilityConfig = GameDataSource.Instance.GetActionPrototypeByID(actionID).Config;
 
                 float reuseTime = abilityConfig.ReuseTimeSeconds;
                 if (reuseTime > 0 && Time.time - lastTimeUsed < reuseTime)
@@ -188,6 +194,7 @@ namespace Unity.BossRoom.Gameplay.Actions
 
                 m_Queue[0].TimeStarted = Time.time;
                 bool play = m_Queue[0].OnStart(m_ServerCharacter);
+                m_ServerCharacter.ManaHandler.RecieveMana(-m_Queue[0].Config.ManaCost);
                 if (!play)
                 {
                     //actions that exited out in the "Start" method will not have their End method called, by design.
@@ -249,7 +256,7 @@ namespace Unity.BossRoom.Gameplay.Actions
         private int SynthesizeTargetIfNecessary(int baseIndex)
         {
             Action baseAction = m_Queue[baseIndex];
-            var targets = baseAction.Data.TargetIds;
+            ulong[] targets = baseAction.Data.TargetIds;
 
             if (targets != null &&
                 targets.Length == 1 &&
@@ -290,7 +297,7 @@ namespace Unity.BossRoom.Gameplay.Actions
                         m_HasPendingSynthesizedAction = true;
                     }
                 }
-                var action = m_Queue[0];
+                Action action = m_Queue[0];
                 m_Queue.RemoveAt(0);
                 TryReturnAction(action);
             }
@@ -365,7 +372,7 @@ namespace Unity.BossRoom.Gameplay.Actions
         {
             bool keepGoing = action.OnUpdate(m_ServerCharacter);
             bool expirable = action.Config.DurationSeconds > 0f; //non-positive value is a sentinel indicating the duration is indefinite.
-            var timeElapsed = Time.time - action.TimeStarted;
+            float timeElapsed = Time.time - action.TimeStarted;
             bool timeExpired = expirable && timeElapsed >= action.Config.DurationSeconds;
             return keepGoing && !timeExpired;
         }
@@ -380,9 +387,9 @@ namespace Unity.BossRoom.Gameplay.Actions
             if (m_Queue.Count == 0) { return 0; }
 
             float totalTime = 0;
-            foreach (var action in m_Queue)
+            foreach (Action action in m_Queue)
             {
-                var info = action.Config;
+                ActionConfig info = action.Config;
                 float actionTime = info.BlockingMode == BlockingModeType.OnlyDuringExecTime ? info.ExecTimeSeconds :
                                     info.BlockingMode == BlockingModeType.EntireDuration ? info.DurationSeconds :
                                     throw new System.Exception($"Unrecognized blocking mode: {info.BlockingMode}");
@@ -416,7 +423,7 @@ namespace Unity.BossRoom.Gameplay.Actions
             {
                 m_Queue[0].BuffValue(buffType, ref buffedValue);
             }
-            foreach (var action in m_NonBlockingActions)
+            foreach (Action action in m_NonBlockingActions)
             {
                 action.BuffValue(buffType, ref buffedValue);
             }
@@ -434,7 +441,7 @@ namespace Unity.BossRoom.Gameplay.Actions
             {
                 m_Queue[0].OnGameplayActivity(m_ServerCharacter, activityThatOccurred);
             }
-            foreach (var action in m_NonBlockingActions)
+            foreach (Action action in m_NonBlockingActions)
             {
                 action.OnGameplayActivity(m_ServerCharacter, activityThatOccurred);
             }
@@ -452,7 +459,7 @@ namespace Unity.BossRoom.Gameplay.Actions
         {
             for (int i = m_NonBlockingActions.Count - 1; i >= 0; --i)
             {
-                var action = m_NonBlockingActions[i];
+                Action action = m_NonBlockingActions[i];
                 if (action.Config.Logic == logic && action != exceptThis)
                 {
                     action.Cancel(m_ServerCharacter);
@@ -464,7 +471,7 @@ namespace Unity.BossRoom.Gameplay.Actions
 
             if (m_Queue.Count > 0)
             {
-                var action = m_Queue[0];
+                Action action = m_Queue[0];
                 if (action.Config.Logic == logic && action != exceptThis)
                 {
                     action.Cancel(m_ServerCharacter);

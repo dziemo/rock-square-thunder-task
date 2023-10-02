@@ -1,4 +1,3 @@
-using System;
 using Unity.BossRoom.Gameplay.GameplayObjects.Character;
 using Unity.BossRoom.Infrastructure;
 using UnityEngine;

@@ -12,13 +12,13 @@ namespace Unity.BossRoom.ConnectionManagement
     /// Connection state corresponding to a host starting up. Starts the host when entering the state. If successful,
     /// transitions to the Hosting state, if not, transitions back to the Offline state.
     /// </summary>
-    class StartingHostState : OnlineState
+    internal class StartingHostState : OnlineState
     {
         [Inject]
-        LobbyServiceFacade m_LobbyServiceFacade;
+        private LobbyServiceFacade m_LobbyServiceFacade;
         [Inject]
-        LocalLobby m_LocalLobby;
-        ConnectionMethodBase m_ConnectionMethod;
+        private LocalLobby m_LocalLobby;
+        private ConnectionMethodBase m_ConnectionMethod;
 
         public StartingHostState Configure(ConnectionMethodBase baseConnectionMethod)
         {
@@ -41,16 +41,16 @@ namespace Unity.BossRoom.ConnectionManagement
 
         public override void ApprovalCheck(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response)
         {
-            var connectionData = request.Payload;
-            var clientId = request.ClientNetworkId;
+            byte[] connectionData = request.Payload;
+            ulong clientId = request.ClientNetworkId;
             // This happens when starting as a host, before the end of the StartHost call. In that case, we simply approve ourselves.
             if (clientId == m_ConnectionManager.NetworkManager.LocalClientId)
             {
-                var payload = System.Text.Encoding.UTF8.GetString(connectionData);
-                var connectionPayload = JsonUtility.FromJson<ConnectionPayload>(payload); // https://docs.unity3d.com/2020.2/Documentation/Manual/JSONSerialization.html
+                string payload = System.Text.Encoding.UTF8.GetString(connectionData);
+                ConnectionPayload connectionPayload = JsonUtility.FromJson<ConnectionPayload>(payload); // https://docs.unity3d.com/2020.2/Documentation/Manual/JSONSerialization.html
 
                 SessionManager<SessionPlayerData>.Instance.SetupConnectingPlayerSessionData(clientId, connectionPayload.playerId,
-                    new SessionPlayerData(clientId, connectionPayload.playerName, new NetworkGuid(), 0, true));
+                    new SessionPlayerData(clientId, connectionPayload.playerName, new NetworkGuid(), 0, 0, true));
 
                 // connection approval will create a player object for you
                 response.Approved = true;
@@ -63,7 +63,7 @@ namespace Unity.BossRoom.ConnectionManagement
             StartHostFailed();
         }
 
-        async void StartHost()
+        private async void StartHost()
         {
             try
             {
@@ -82,7 +82,7 @@ namespace Unity.BossRoom.ConnectionManagement
             }
         }
 
-        void StartHostFailed()
+        private void StartHostFailed()
         {
             m_ConnectStatusPublisher.Publish(ConnectStatus.StartHostFailed);
             m_ConnectionManager.ChangeState(m_ConnectionManager.m_Offline);

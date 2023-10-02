@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using Unity.BossRoom.ConnectionManagement;
 using Unity.BossRoom.Gameplay.Actions;
@@ -23,12 +22,12 @@ namespace Unity.BossRoom.Gameplay.GameplayObjects.Character
     {
         [FormerlySerializedAs("m_ClientVisualization")]
         [SerializeField]
-        ClientCharacter m_ClientCharacter;
+        private ClientCharacter m_ClientCharacter;
 
         public ClientCharacter clientCharacter => m_ClientCharacter;
 
         [SerializeField]
-        CharacterClass m_CharacterClass;
+        private CharacterClass m_CharacterClass;
 
         public CharacterClass CharacterClass
         {
@@ -82,6 +81,11 @@ namespace Unity.BossRoom.Gameplay.GameplayObjects.Character
             private set => NetLifeState.LifeState.Value = value;
         }
 
+        [SerializeField]
+        private CharacterManaHandler m_ManaHandler;
+
+        public CharacterManaHandler ManaHandler { get => m_ManaHandler; }
+
         /// <summary>
         /// Returns true if this Character is an NPC.
         /// </summary>
@@ -119,29 +123,28 @@ namespace Unity.BossRoom.Gameplay.GameplayObjects.Character
         [Tooltip("If set, the ServerCharacter will automatically play the StartingAction when it is created. ")]
         private Action m_StartingAction;
 
+        [SerializeField]
+        private DamageReceiver m_DamageReceiver;
 
         [SerializeField]
-        DamageReceiver m_DamageReceiver;
-
-        [SerializeField]
-        ServerCharacterMovement m_Movement;
+        private ServerCharacterMovement m_Movement;
 
         public ServerCharacterMovement Movement => m_Movement;
 
         [SerializeField]
-        PhysicsWrapper m_PhysicsWrapper;
+        private PhysicsWrapper m_PhysicsWrapper;
 
         public PhysicsWrapper physicsWrapper => m_PhysicsWrapper;
 
         [SerializeField]
-        ServerAnimationHandler m_ServerAnimationHandler;
+        private ServerAnimationHandler m_ServerAnimationHandler;
 
         public ServerAnimationHandler serverAnimationHandler => m_ServerAnimationHandler;
 
         private AIBrain m_AIBrain;
-        NetworkAvatarGuidState m_State;
+        private NetworkAvatarGuidState m_State;
 
-        void Awake()
+        private void Awake()
         {
             m_ServerActionPlayer = new ServerActionPlayer(this);
             NetLifeState = GetComponent<NetworkLifeState>();
@@ -165,10 +168,11 @@ namespace Unity.BossRoom.Gameplay.GameplayObjects.Character
 
                 if (m_StartingAction != null)
                 {
-                    var startingAction = new ActionRequestData() { ActionID = m_StartingAction.ActionID };
+                    ActionRequestData startingAction = new ActionRequestData() { ActionID = m_StartingAction.ActionID };
                     PlayAction(ref startingAction);
                 }
                 InitializeHitPoints();
+                m_ManaHandler.InitializeMana(CharacterClass);
             }
         }
 
@@ -237,7 +241,7 @@ namespace Unity.BossRoom.Gameplay.GameplayObjects.Character
             m_ServerActionPlayer.OnGameplayActivity(Action.GameplayActivity.StoppedChargingUp);
         }
 
-        void InitializeHitPoints()
+        private void InitializeHitPoints()
         {
             HitPoints = CharacterClass.BaseHP.Value;
 
@@ -272,7 +276,7 @@ namespace Unity.BossRoom.Gameplay.GameplayObjects.Character
             }
         }
 
-        void OnLifeStateChanged(LifeState prevLifeState, LifeState lifeState)
+        private void OnLifeStateChanged(LifeState prevLifeState, LifeState lifeState)
         {
             if (lifeState != LifeState.Alive)
             {
@@ -281,7 +285,7 @@ namespace Unity.BossRoom.Gameplay.GameplayObjects.Character
             }
         }
 
-        IEnumerator KilledDestroyProcess()
+        private IEnumerator KilledDestroyProcess()
         {
             yield return new WaitForSeconds(m_KilledDestroyDelaySeconds);
 
@@ -296,7 +300,7 @@ namespace Unity.BossRoom.Gameplay.GameplayObjects.Character
         /// </summary>
         /// <param name="inflicter">Person dishing out this damage/healing. Can be null. </param>
         /// <param name="HP">The HP to receive. Positive value is healing. Negative is damage.  </param>
-        void ReceiveHP(ServerCharacter inflicter, int HP)
+        private void ReceiveHP(ServerCharacter inflicter, int HP)
         {
             //to our own effects, and modify the damage or healing as appropriate. But in this game, we just take it straight.
             if (HP > 0)
@@ -377,7 +381,7 @@ namespace Unity.BossRoom.Gameplay.GameplayObjects.Character
             }
         }
 
-        void Update()
+        private void Update()
         {
             m_ServerActionPlayer.OnUpdate();
             if (m_AIBrain != null && LifeState == LifeState.Alive && m_BrainEnabled)
@@ -386,7 +390,7 @@ namespace Unity.BossRoom.Gameplay.GameplayObjects.Character
             }
         }
 
-        void CollisionEntered(Collision collision)
+        private void CollisionEntered(Collision collision)
         {
             if (m_ServerActionPlayer != null)
             {
@@ -398,6 +402,5 @@ namespace Unity.BossRoom.Gameplay.GameplayObjects.Character
         /// This character's AIBrain. Will be null if this is not an NPC.
         /// </summary>
         public AIBrain AIBrain { get { return m_AIBrain; } }
-
     }
 }

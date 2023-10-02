@@ -1,4 +1,3 @@
-using System;
 using Unity.BossRoom.Infrastructure;
 using Unity.BossRoom.UnityServices.Lobbies;
 using Unity.Multiplayer.Samples.BossRoom;
@@ -13,15 +12,15 @@ namespace Unity.BossRoom.ConnectionManagement
     /// Connection state corresponding to a listening host. Handles incoming client connections. When shutting down or
     /// being timed out, transitions to the Offline state.
     /// </summary>
-    class HostingState : OnlineState
+    internal class HostingState : OnlineState
     {
         [Inject]
-        LobbyServiceFacade m_LobbyServiceFacade;
+        private LobbyServiceFacade m_LobbyServiceFacade;
         [Inject]
-        IPublisher<ConnectionEventMessage> m_ConnectionEventPublisher;
+        private IPublisher<ConnectionEventMessage> m_ConnectionEventPublisher;
 
         // used in ApprovalCheck. This is intended as a bit of light protection against DOS attacks that rely on sending silly big buffers of garbage.
-        const int k_MaxConnectPayload = 1024;
+        private const int k_MaxConnectPayload = 1024;
 
         public override void Enter()
         {
@@ -42,7 +41,7 @@ namespace Unity.BossRoom.ConnectionManagement
 
         public override void OnClientConnected(ulong clientId)
         {
-            var playerData = SessionManager<SessionPlayerData>.Instance.GetPlayerData(clientId);
+            SessionPlayerData? playerData = SessionManager<SessionPlayerData>.Instance.GetPlayerData(clientId);
             if (playerData != null)
             {
                 m_ConnectionEventPublisher.Publish(new ConnectionEventMessage() { ConnectStatus = ConnectStatus.Success, PlayerName = playerData.Value.PlayerName });
@@ -51,7 +50,7 @@ namespace Unity.BossRoom.ConnectionManagement
             {
                 // This should not happen since player data is assigned during connection approval
                 Debug.LogError($"No player data associated with client {clientId}");
-                var reason = JsonUtility.ToJson(ConnectStatus.GenericDisconnect);
+                string reason = JsonUtility.ToJson(ConnectStatus.GenericDisconnect);
                 m_ConnectionManager.NetworkManager.DisconnectClient(clientId, reason);
             }
 
@@ -61,10 +60,10 @@ namespace Unity.BossRoom.ConnectionManagement
         {
             if (clientId != m_ConnectionManager.NetworkManager.LocalClientId)
             {
-                var playerId = SessionManager<SessionPlayerData>.Instance.GetPlayerId(clientId);
+                string playerId = SessionManager<SessionPlayerData>.Instance.GetPlayerId(clientId);
                 if (playerId != null)
                 {
-                    var sessionData = SessionManager<SessionPlayerData>.Instance.GetPlayerData(playerId);
+                    SessionPlayerData? sessionData = SessionManager<SessionPlayerData>.Instance.GetPlayerData(playerId);
                     if (sessionData.HasValue)
                     {
                         m_ConnectionEventPublisher.Publish(new ConnectionEventMessage() { ConnectStatus = ConnectStatus.GenericDisconnect, PlayerName = sessionData.Value.PlayerName });
@@ -76,10 +75,10 @@ namespace Unity.BossRoom.ConnectionManagement
 
         public override void OnUserRequestedShutdown()
         {
-            var reason = JsonUtility.ToJson(ConnectStatus.HostEndedSession);
-            for (var i = m_ConnectionManager.NetworkManager.ConnectedClientsIds.Count - 1; i >= 0; i--)
+            string reason = JsonUtility.ToJson(ConnectStatus.HostEndedSession);
+            for (int i = m_ConnectionManager.NetworkManager.ConnectedClientsIds.Count - 1; i >= 0; i--)
             {
-                var id = m_ConnectionManager.NetworkManager.ConnectedClientsIds[i];
+                ulong id = m_ConnectionManager.NetworkManager.ConnectedClientsIds[i];
                 if (id != m_ConnectionManager.NetworkManager.LocalClientId)
                 {
                     m_ConnectionManager.NetworkManager.DisconnectClient(id, reason);
@@ -110,8 +109,8 @@ namespace Unity.BossRoom.ConnectionManagement
         ///  <param name="response"> Our response to the approval process. In case of connection refusal with custom return message, we delay using the Pending field.
         public override void ApprovalCheck(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response)
         {
-            var connectionData = request.Payload;
-            var clientId = request.ClientNetworkId;
+            byte[] connectionData = request.Payload;
+            ulong clientId = request.ClientNetworkId;
             if (connectionData.Length > k_MaxConnectPayload)
             {
                 // If connectionData too high, deny immediately to avoid wasting time on the server. This is intended as
@@ -120,14 +119,14 @@ namespace Unity.BossRoom.ConnectionManagement
                 return;
             }
 
-            var payload = System.Text.Encoding.UTF8.GetString(connectionData);
-            var connectionPayload = JsonUtility.FromJson<ConnectionPayload>(payload); // https://docs.unity3d.com/2020.2/Documentation/Manual/JSONSerialization.html
-            var gameReturnStatus = GetConnectStatus(connectionPayload);
+            string payload = System.Text.Encoding.UTF8.GetString(connectionData);
+            ConnectionPayload connectionPayload = JsonUtility.FromJson<ConnectionPayload>(payload); // https://docs.unity3d.com/2020.2/Documentation/Manual/JSONSerialization.html
+            ConnectStatus gameReturnStatus = GetConnectStatus(connectionPayload);
 
             if (gameReturnStatus == ConnectStatus.Success)
             {
                 SessionManager<SessionPlayerData>.Instance.SetupConnectingPlayerSessionData(clientId, connectionPayload.playerId,
-                    new SessionPlayerData(clientId, connectionPayload.playerName, new NetworkGuid(), 0, true));
+                    new SessionPlayerData(clientId, connectionPayload.playerName, new NetworkGuid(), 0, 0, true));
 
                 // connection approval will create a player object for you
                 response.Approved = true;
@@ -145,7 +144,7 @@ namespace Unity.BossRoom.ConnectionManagement
             }
         }
 
-        ConnectStatus GetConnectStatus(ConnectionPayload connectionPayload)
+        private ConnectStatus GetConnectStatus(ConnectionPayload connectionPayload)
         {
             if (m_ConnectionManager.NetworkManager.ConnectedClientsIds.Count >= m_ConnectionManager.MaxConnectedPlayers)
             {

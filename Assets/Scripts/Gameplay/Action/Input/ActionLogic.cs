@@ -1,5 +1,3 @@
-using System;
-
 namespace Unity.BossRoom.Gameplay.Actions
 {
     /// <summary>
@@ -24,6 +22,7 @@ namespace Unity.BossRoom.Gameplay.Actions
         DashAttack,
         ImpToss,
         PickUp,
-        Drop
+        Drop,
+        Aura,
     }
 }
