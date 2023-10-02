@@ -64,12 +64,5 @@ namespace Unity.BossRoom.Gameplay.Actions
 
             return manaRecievers;
         }
-
-        public override bool OnStartClient(ClientCharacter clientCharacter)
-        {
-            base.OnStartClient(clientCharacter);
-            InstantiateSpecialFXGraphics(clientCharacter.transform, true);
-            return true;
-        }
     }
 }
