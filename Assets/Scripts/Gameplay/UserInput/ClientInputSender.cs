@@ -17,30 +17,27 @@ namespace Unity.BossRoom.Gameplay.UserInput
     [RequireComponent(typeof(ServerCharacter))]
     public class ClientInputSender : NetworkBehaviour
     {
-        const float k_MouseInputRaycastDistance = 100f;
+        private const float k_MouseInputRaycastDistance = 100f;
 
         //The movement input rate is capped at 40ms (or 25 fps). This provides a nice balance between responsiveness and
         //upstream network conservation. This matters when holding down your mouse button to move.
-        const float k_MoveSendRateSeconds = 0.04f; //25 fps.
+        private const float k_MoveSendRateSeconds = 0.04f; //25 fps.
 
-        const float k_TargetMoveTimeout = 0.45f;  //prevent moves for this long after targeting someone (helps prevent walking to the guy you clicked).
+        private const float k_TargetMoveTimeout = 0.45f;  //prevent moves for this long after targeting someone (helps prevent walking to the guy you clicked).
 
-        float m_LastSentMove;
+        private float m_LastSentMove;
 
         // Cache raycast hit array so that we can use non alloc raycasts
-        readonly RaycastHit[] k_CachedHit = new RaycastHit[4];
+        private readonly RaycastHit[] k_CachedHit = new RaycastHit[4];
 
         // This is basically a constant but layer masks cannot be created in the constructor, that's why it's assigned int Awake.
-        LayerMask m_GroundLayerMask;
-
-        LayerMask m_ActionLayerMask;
-
-        const float k_MaxNavMeshDistance = 1f;
-
-        RaycastHitComparer m_RaycastHitComparer;
+        private LayerMask m_GroundLayerMask;
+        private LayerMask m_ActionLayerMask;
+        private const float k_MaxNavMeshDistance = 1f;
+        private RaycastHitComparer m_RaycastHitComparer;
 
         [SerializeField]
-        ServerCharacter m_ServerCharacter;
+        private ServerCharacter m_ServerCharacter;
 
         /// <summary>
         /// This event fires at the time when an action request is sent to the server.
@@ -61,7 +58,7 @@ namespace Unity.BossRoom.Gameplay.UserInput
             UIRelease,   //represents letting go of the mouse-button on a UI button
         }
 
-        bool IsReleaseStyle(SkillTriggerStyle style)
+        private bool IsReleaseStyle(SkillTriggerStyle style)
         {
             return style == SkillTriggerStyle.KeyboardRelease || style == SkillTriggerStyle.UIRelease;
         }
@@ -74,7 +71,7 @@ namespace Unity.BossRoom.Gameplay.UserInput
         /// <remarks>
         /// Reference: https://answers.unity.com/questions/1141633/why-does-fixedupdate-work-when-update-doesnt.html
         /// </remarks>
-        struct ActionRequest
+        private struct ActionRequest
         {
             public SkillTriggerStyle TriggerStyle;
             public ActionID RequestedActionID;
@@ -85,28 +82,25 @@ namespace Unity.BossRoom.Gameplay.UserInput
         /// List of ActionRequests that have been received since the last FixedUpdate ran. This is a static array, to avoid allocs, and
         /// because we don't really want to let this list grow indefinitely.
         /// </summary>
-        readonly ActionRequest[] m_ActionRequests = new ActionRequest[5];
+        private readonly ActionRequest[] m_ActionRequests = new ActionRequest[5];
 
         /// <summary>
         /// Number of ActionRequests that have been queued since the last FixedUpdate.
         /// </summary>
-        int m_ActionRequestCount;
-
-        BaseActionInput m_CurrentSkillInput;
-
-        bool m_MoveRequest;
-
-        Camera m_MainCamera;
+        private int m_ActionRequestCount;
+        private BaseActionInput m_CurrentSkillInput;
+        private bool m_MoveRequest;
+        private Camera m_MainCamera;
 
         public event Action<Vector3> ClientMoveEvent;
 
         /// <summary>
         /// Convenience getter that returns our CharacterData
         /// </summary>
-        CharacterClass CharacterClass => m_ServerCharacter.CharacterClass;
+        private CharacterClass CharacterClass => m_ServerCharacter.CharacterClass;
 
         [SerializeField]
-        PhysicsWrapper m_PhysicsWrapper;
+        private PhysicsWrapper m_PhysicsWrapper;
 
         public ActionState actionState1 { get; private set; }
 
@@ -115,10 +109,9 @@ namespace Unity.BossRoom.Gameplay.UserInput
         public ActionState actionState3 { get; private set; }
 
         public System.Action action1ModifiedCallback;
+        private ServerCharacter m_TargetServerCharacter;
 
-        ServerCharacter m_TargetServerCharacter;
-
-        void Awake()
+        private void Awake()
         {
             m_MainCamera = Camera.main;
         }
@@ -136,17 +129,17 @@ namespace Unity.BossRoom.Gameplay.UserInput
             m_ServerCharacter.HeldNetworkObject.OnValueChanged += OnHeldNetworkObjectChanged;
 
             if (CharacterClass.Skill1 &&
-                GameDataSource.Instance.TryGetActionPrototypeByID(CharacterClass.Skill1.ActionID, out var action1))
+                GameDataSource.Instance.TryGetActionPrototypeByID(CharacterClass.Skill1.ActionID, out Actions.Action action1))
             {
                 actionState1 = new ActionState() { actionID = action1.ActionID, selectable = true };
             }
             if (CharacterClass.Skill2 &&
-                GameDataSource.Instance.TryGetActionPrototypeByID(CharacterClass.Skill2.ActionID, out var action2))
+                GameDataSource.Instance.TryGetActionPrototypeByID(CharacterClass.Skill2.ActionID, out Actions.Action action2))
             {
                 actionState2 = new ActionState() { actionID = action2.ActionID, selectable = true };
             }
             if (CharacterClass.Skill3 &&
-                GameDataSource.Instance.TryGetActionPrototypeByID(CharacterClass.Skill3.ActionID, out var action3))
+                GameDataSource.Instance.TryGetActionPrototypeByID(CharacterClass.Skill3.ActionID, out Actions.Action action3))
             {
                 actionState3 = new ActionState() { actionID = action3.ActionID, selectable = true };
             }
@@ -171,7 +164,7 @@ namespace Unity.BossRoom.Gameplay.UserInput
             }
         }
 
-        void OnTargetChanged(ulong previousValue, ulong newValue)
+        private void OnTargetChanged(ulong previousValue, ulong newValue)
         {
             if (m_TargetServerCharacter)
             {
@@ -180,7 +173,7 @@ namespace Unity.BossRoom.Gameplay.UserInput
 
             m_TargetServerCharacter = null;
 
-            if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(newValue, out var selection) &&
+            if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(newValue, out NetworkObject selection) &&
                 selection.TryGetComponent(out m_TargetServerCharacter))
             {
                 m_TargetServerCharacter.NetLifeState.LifeState.OnValueChanged += OnTargetLifeStateChanged;
@@ -189,28 +182,28 @@ namespace Unity.BossRoom.Gameplay.UserInput
             UpdateAction1();
         }
 
-        void OnHeldNetworkObjectChanged(ulong previousValue, ulong newValue)
+        private void OnHeldNetworkObjectChanged(ulong previousValue, ulong newValue)
         {
             UpdateAction1();
         }
 
-        void OnTargetLifeStateChanged(LifeState previousValue, LifeState newValue)
+        private void OnTargetLifeStateChanged(LifeState previousValue, LifeState newValue)
         {
             UpdateAction1();
         }
 
-        void FinishSkill()
+        private void FinishSkill()
         {
             m_CurrentSkillInput = null;
         }
 
-        void SendInput(ActionRequestData action)
+        private void SendInput(ActionRequestData action)
         {
             ActionInputEvent?.Invoke(action);
             m_ServerCharacter.RecvDoActionServerRPC(action);
         }
 
-        void FixedUpdate()
+        private void FixedUpdate()
         {
             //play all ActionRequests, in FIFO order.
             for (int i = 0; i < m_ActionRequestCount; ++i)
@@ -225,10 +218,10 @@ namespace Unity.BossRoom.Gameplay.UserInput
                 }
                 else if (!IsReleaseStyle(m_ActionRequests[i].TriggerStyle))
                 {
-                    var actionPrototype = GameDataSource.Instance.GetActionPrototypeByID(m_ActionRequests[i].RequestedActionID);
+                    Actions.Action actionPrototype = GameDataSource.Instance.GetActionPrototypeByID(m_ActionRequests[i].RequestedActionID);
                     if (actionPrototype.Config.ActionInput != null)
                     {
-                        var skillPlayer = Instantiate(actionPrototype.Config.ActionInput);
+                        BaseActionInput skillPlayer = Instantiate(actionPrototype.Config.ActionInput);
                         skillPlayer.Initiate(m_ServerCharacter, m_PhysicsWrapper.Transform.position, actionPrototype.ActionID, SendInput, FinishSkill);
                         m_CurrentSkillInput = skillPlayer;
                     }
@@ -252,9 +245,9 @@ namespace Unity.BossRoom.Gameplay.UserInput
                 if ((Time.time - m_LastSentMove) > k_MoveSendRateSeconds)
                 {
                     m_LastSentMove = Time.time;
-                    var ray = m_MainCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+                    Ray ray = m_MainCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
 
-                    var groundHits = Physics.RaycastNonAlloc(ray,
+                    int groundHits = Physics.RaycastNonAlloc(ray,
                         k_CachedHit,
                         k_MouseInputRaycastDistance,
                         m_GroundLayerMask);
@@ -269,7 +262,7 @@ namespace Unity.BossRoom.Gameplay.UserInput
 
                         // verify point is indeed on navmesh surface
                         if (NavMesh.SamplePosition(k_CachedHit[0].point,
-                                out var hit,
+                                out NavMeshHit hit,
                                 k_MaxNavMeshDistance,
                                 NavMesh.AllAreas))
                         {
@@ -289,15 +282,14 @@ namespace Unity.BossRoom.Gameplay.UserInput
         /// <param name="actionID">The action you want to play. Note that "Skill1" may be overriden contextually depending on the target.</param>
         /// <param name="triggerStyle">What sort of input triggered this skill?</param>
         /// <param name="targetId">(optional) Pass in a specific networkID to target for this action</param>
-        void PerformSkill(ActionID actionID, SkillTriggerStyle triggerStyle, ulong targetId = 0)
+        private void PerformSkill(ActionID actionID, SkillTriggerStyle triggerStyle, ulong targetId = 0)
         {
             Transform hitTransform = null;
 
             if (targetId != 0)
             {
                 // if a targetId is given, try to find the object
-                NetworkObject targetNetObj;
-                if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(targetId, out targetNetObj))
+                if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(targetId, out NetworkObject targetNetObj))
                 {
                     hitTransform = targetNetObj.transform;
                 }
@@ -308,7 +300,7 @@ namespace Unity.BossRoom.Gameplay.UserInput
                 int numHits = 0;
                 if (triggerStyle == SkillTriggerStyle.MouseClick)
                 {
-                    var ray = m_MainCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+                    Ray ray = m_MainCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
                     numHits = Physics.RaycastNonAlloc(ray, k_CachedHit, k_MouseInputRaycastDistance, m_ActionLayerMask);
                 }
 
@@ -338,7 +330,7 @@ namespace Unity.BossRoom.Gameplay.UserInput
                 // (Different Actions will deal with this differently. For some, like archer arrows, this will fire an arrow
                 // in the desired direction. For others, like mage's bolts, this will fire a "miss" projectile at the spot clicked on.)
 
-                var data = new ActionRequestData();
+                ActionRequestData data = new ActionRequestData();
                 PopulateSkillRequest(k_CachedHit[0].point, actionID, ref data);
 
                 SendInput(data);
@@ -354,11 +346,11 @@ namespace Unity.BossRoom.Gameplay.UserInput
         /// <param name="triggerStyle">How did this skill play get triggered? Mouse, Keyboard, UI etc.</param>
         /// <param name="resultData">Out parameter that will be filled with the resulting action, if any.</param>
         /// <returns>true if we should play an action, false otherwise. </returns>
-        bool GetActionRequestForTarget(Transform hit, ActionID actionID, SkillTriggerStyle triggerStyle, out ActionRequestData resultData)
+        private bool GetActionRequestForTarget(Transform hit, ActionID actionID, SkillTriggerStyle triggerStyle, out ActionRequestData resultData)
         {
             resultData = new ActionRequestData();
 
-            var targetNetObj = hit != null ? hit.GetComponentInParent<NetworkObject>() : null;
+            NetworkObject targetNetObj = hit != null ? hit.GetComponentInParent<NetworkObject>() : null;
 
             //if we can't get our target from the submitted hit transform, get it from our stateful target in our ServerCharacter.
             if (!targetNetObj && !GameDataSource.Instance.GetActionPrototypeByID(actionID).IsGeneralTargetAction)
@@ -373,7 +365,7 @@ namespace Unity.BossRoom.Gameplay.UserInput
                 return false;
             }
 
-            if (targetNetObj.TryGetComponent<ServerCharacter>(out var serverCharacter))
+            if (targetNetObj.TryGetComponent<ServerCharacter>(out ServerCharacter serverCharacter))
             {
                 //Skill1 may be contextually overridden if it was generated from a mouse-click.
                 if (actionID == CharacterClass.Skill1.ActionID && triggerStyle == SkillTriggerStyle.MouseClick)
@@ -387,7 +379,7 @@ namespace Unity.BossRoom.Gameplay.UserInput
             }
 
             Vector3 targetHitPoint;
-            if (PhysicsWrapper.TryGetPhysicsWrapper(targetNetObj.NetworkObjectId, out var movementContainer))
+            if (PhysicsWrapper.TryGetPhysicsWrapper(targetNetObj.NetworkObjectId, out PhysicsWrapper movementContainer))
             {
                 targetHitPoint = movementContainer.Transform.position;
             }
@@ -409,10 +401,10 @@ namespace Unity.BossRoom.Gameplay.UserInput
         /// <param name="hitPoint">The point in world space where the click ray hit the target.</param>
         /// <param name="actionID">The action to perform (will be stamped on the resultData)</param>
         /// <param name="resultData">The ActionRequestData to be filled out with additional information.</param>
-        void PopulateSkillRequest(Vector3 hitPoint, ActionID actionID, ref ActionRequestData resultData)
+        private void PopulateSkillRequest(Vector3 hitPoint, ActionID actionID, ref ActionRequestData resultData)
         {
             resultData.ActionID = actionID;
-            var actionConfig = GameDataSource.Instance.GetActionPrototypeByID(actionID).Config;
+            ActionConfig actionConfig = GameDataSource.Instance.GetActionPrototypeByID(actionID).Config;
 
             //most skill types should implicitly close distance. The ones that don't are explicitly set to false in the following switch.
             resultData.ShouldClose = true;
@@ -471,7 +463,7 @@ namespace Unity.BossRoom.Gameplay.UserInput
             }
         }
 
-        void Update()
+        private void Update()
         {
             if (Input.GetKeyDown(KeyCode.Alpha1))
             {
@@ -536,25 +528,25 @@ namespace Unity.BossRoom.Gameplay.UserInput
             }
         }
 
-        void UpdateAction1()
+        private void UpdateAction1()
         {
-            var isHoldingNetworkObject =
+            bool isHoldingNetworkObject =
                 NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(m_ServerCharacter.HeldNetworkObject.Value,
-                    out var heldNetworkObject);
+                    out NetworkObject heldNetworkObject);
 
             NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(m_ServerCharacter.TargetId.Value,
-                out var selection);
+                out NetworkObject selection);
 
-            var isSelectable = true;
+            bool isSelectable = true;
             if (isHoldingNetworkObject)
             {
                 // show drop!
 
                 actionState1.actionID = GameDataSource.Instance.DropActionPrototype.ActionID;
             }
-            else if ((m_ServerCharacter.TargetId.Value != 0
+            else if (m_ServerCharacter.TargetId.Value != 0
                     && selection != null
-                    && selection.TryGetComponent(out PickUpState pickUpState))
+                    && selection.TryGetComponent(out PickUpState pickUpState)
                )
             {
                 // special case: targeting a pickup-able item or holding a pickup object
